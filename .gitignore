@@ -1,3 +1,6 @@
+# build
 /target
 
+# clutter
+.vscode
 .DS_Store
