@@ -86,35 +86,7 @@ impl TwoCnf {
         }
     }
 
-    fn prune_clauses(&mut self) {
-        // Remove (a or ~a) from self.clauses
-        self.clauses.retain(|clause| {
-            let Literal(name1, sign1) = &clause.0;
-            let Literal(name2, sign2) = &clause.1;
-
-            // !(name1 == name2 && sign1 != sign2)
-            name1 != name2 || sign1 == sign2
-        });
-        
-        // If (a or b) in self.clauses remove (b or a)
-        let mut parallel_delete_clauses = self.clauses.clone();
-        self.clauses.retain(|clause| {
-            let reordered_clause = (clause.1.clone(), clause.0.clone());
-            
-            let delete = parallel_delete_clauses.contains(&reordered_clause);
-            if delete {
-                parallel_delete_clauses.remove(clause);
-            }
-            !delete
-        });
-    }
-
     fn is_sat(&mut self) -> bool {
-        // If there are no variables, it is trivially satisfiable
-        if self.variables.is_empty() {
-            return true;
-        }
-
         // For each variable
         for var in &self.variables {
             let mut new_clauses = HashSet::<(Literal, Literal)>::new();
@@ -147,14 +119,12 @@ impl TwoCnf {
             }
         }
 
-        self.prune_clauses();
-
         // Search for (a or a) and (~a or ~a) in the clauses
         for var in &self.variables {
             let pos_clause = (Literal(var.clone(), false), Literal(var.clone(), false));
             let neg_clause = (Literal(var.clone(), true), Literal(var.clone(), true));
 
-            // IN this case, it is not SAT
+            // If a & ~a can be derived, the input formula is not SAT
             if self.clauses.contains(&pos_clause) && self.clauses.contains(&neg_clause) {
                 return false;
             }
@@ -205,5 +175,20 @@ mod tests {
     fn test_bad_init() {
         // This is a DNF
         TwoCnf::from_description("a|b".to_string());
+    }
+
+    #[test]
+    fn test_is_sat() {
+        // SAT
+        assert!(TwoCnf::from_description(String::from("(a|~b)")).is_sat());
+        assert!(TwoCnf::from_description(String::from("(a|~b)&(~a|b)&(~a|~b)")).is_sat());
+        assert!(TwoCnf::from_description(String::from("(x1|x2) & (x1|~x3) & (~x1|~x2) & (x1|x4) & (~x1|~x5)")).is_sat());
+        assert!(TwoCnf::from_description(String::from("(a|c)&(~a|~b)&(b|~c)")).is_sat());
+        assert!(TwoCnf::from_description(String::from("(a|~b)&(~a|b)&(~a|~b)&(a|~c)")).is_sat());
+
+        // UNSAT
+        assert!(!TwoCnf::from_description(String::from("a&~a")).is_sat());
+        assert!(!TwoCnf::from_description(String::from("(a|b)&(a|~b)&(~a|b)&(~a|~b)")).is_sat());
+        assert!(!TwoCnf::from_description(String::from("(a|c)&(~a|~b)&(b|~c)&(a|~c)&(b|c)")).is_sat());
     }
 }
