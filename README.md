@@ -1,8 +1,8 @@
 # TwoSAT
 
-A 2SAT solver, written in Rust. If you are curious enough to search through the git history of this repository
-you will find that I initially implemented this 2SAT solver using the logical rule of resolution. However, it ran in $O(n^4)$ time or something like that, incredibly inefficient (it was still polytime though!).
-Regardless, after learning about a linear time solution to 2SAT using strongly connected components of its implication graph (see [Wikipedia](https://en.wikipedia.org/wiki/2-satisfiability#Strongly_connected_components)), I decided to convert my solution to this more efficient one that other people had figured out, something more respectable to publish online.
+A 2SAT solver, written in Rust. The 2SAT language is the set of 2CNFs $\phi$ that are satisfiable. Specifically, $\phi\in 2SAT$ iff $\phi$ is a Boolean formula for which there exists at least one assignment of variables that makes $\phi$ true, and $\phi$ is of the form $\phi = C_1\wedge C_2\wedge ... \wedge C_n$ where each $C_i$ is a disjunction of at most 2 literals (i.e., an expression $a$ or $(a\vee b)$ where $a$ and $b$ are of the form $x_i$ or $\neg x_i$ for any input Boolean variable $x_i$).
+
+The generalized problem $SAT$, of satisfiable Boolean formulas that are not restricted to be 2CNFs, is well known to be $NP$-Complete. However, 2SAT can be solved in linear time, and thus is definitely in $P$.
 
 # Usage
 
@@ -32,3 +32,9 @@ Formula is SAT: false
 $ cargo run "(a|b)"
 Formula is SAT: true
 ```
+
+## Trivia
+
+If you are curious enough to search through the git history of this repository
+you will find that I initially implemented this 2SAT solver using the logical rule of resolution. However, it ran in $O(n^4)$ time or something like that, incredibly inefficient (it was still polytime though!).
+Regardless, after learning about a linear time solution to 2SAT using strongly connected components of its implication graph (see [Wikipedia](https://en.wikipedia.org/wiki/2-satisfiability#Strongly_connected_components)), I decided to convert my solution to this more efficient one that other people had figured out, something more respectable to publish online.
