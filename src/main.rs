@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use regex::Regex;
 use std::env;
 
@@ -87,52 +87,147 @@ impl TwoCnf {
     }
 
     fn is_sat(&mut self) -> bool {
-        // For each variable
-        for var in &self.variables {
-            let mut new_clauses = HashSet::<(Literal, Literal)>::new();
-            // Resolve as many clauses as possible
-            for clause1 in &self.clauses {
-                for clause2 in &self.clauses {
-                    // Can't resolve a clause with itself
-                    if clause1 == clause2 {
-                        continue;
-                    }
+        // The strongly connected components of the implication graph of the CNF
+        // allow us to determine if the instance is satisfiable
+        // The instance is satisfiable iff its strongly connected components
+        // do not connect any literal to its negation
 
-                    // if the names are the same but the signs differ, they can be resolved
-                    match (clause1, clause2) {
-                        ((Literal(n1, s1), c1_other_lit), (Literal(n2, s2), c2_other_lit)) 
-                        | ((Literal(n1, s1), c1_other_lit), (c2_other_lit, Literal(n2, s2)))
-                        | ((c1_other_lit, Literal(n1, s1)), (Literal(n2, s2), c2_other_lit))
-                        | ((c1_other_lit, Literal(n1, s1)), (c2_other_lit, Literal(n2, s2)))
-                        if n1 == var && n2 == var && s1 != s2 => {
-                            // Resolved clause
-                            new_clauses.insert((c1_other_lit.clone(), c2_other_lit.clone()));
-                        },
-                        _ => continue
+        // We have to construct the implication graph for the CNF
+        // in order to do this, we utilize data structures that will help us find strongly connected components
+        // index, lowlink, onstack
+        #[derive(PartialEq, Eq, Hash)]
+        struct SCCNodeInfo(u32, u32, bool);
+
+        // algorithm to find strongly connected components
+        // Reference: https://en.wikipedia.org/wiki/Tarjan%27s_strongly_connected_components_algorithm
+        fn find_scc(
+            v: Literal,
+            graph: &HashMap<Literal, HashSet<Literal>>,
+            node_info: &mut HashMap<Literal, SCCNodeInfo>,
+            stack: &mut Vec<Literal>,
+            strongly_connected_components: &mut Vec<HashSet<Literal>>,
+            next_index: &mut u32
+        ) {
+            // set the depth index for v to the smallest unused index
+            stack.push(v.clone());
+            let v_info = SCCNodeInfo(*next_index, *next_index, true);
+            node_info.insert(v.clone(), v_info);
+            *next_index += 1;
+
+            // Consider all edges implied by v
+            for u in &graph[&v.clone()] {
+                let u_info = node_info.get_mut(&u);
+                match u_info {
+                    // if u has been processed before, and it is on the stack we perform further processing
+                    // if w is not on the stack then (v, u) is an edge to an SCC already found and should be ignored
+                    Some(SCCNodeInfo(u_index, _u_lowlink, u_onstack)) => {
+                        if *u_onstack {
+                            // update the lowlink of v
+                            let u_index = *u_index;
+                            let v_info = node_info.get_mut(&v).unwrap();
+                            v_info.1 = u32::min(v_info.1, u_index);
+                        }
+                    }
+                    // if u hasn't been processed before, recurse
+                    None => {
+                        find_scc(u.clone(), graph, node_info, stack, strongly_connected_components, next_index);
+                        // update the lowlink of v
+                        let u_lowlink = node_info.get(&u).unwrap().1;
+                        let v_lowlink = node_info.get(&v).unwrap().1;
+                        node_info.get_mut(&v).unwrap().1 = u32::min(v_lowlink, u_lowlink);
                     }
                 }
             }
+            
+            // If v is a root node, pop the stack to generate an SCC
+            // we check the v is a root node if v.index == v.lowlink
+            let v_info = node_info.get_mut(&v).unwrap();
+            if v_info.0 == v_info.1 {
+                // start a new strongly connected component
+                let mut new_scc = HashSet::<Literal>::new();
+                // Until we hit v, pop the stack to create the new strongly connected component
+                loop {
+                    // set each w popped to be off the stack
+                    let w = stack.pop().unwrap();
+                    node_info.get_mut(&w).unwrap().2 = false;
+                    new_scc.insert(w.clone());
+                    if w == v {
+                        break;
+                    }
+                }
 
-            // Insert the new clauses into the TwoCnf's clauses
-            for clause in new_clauses {
-                self.clauses.insert(clause);
+                // add the strongly connected component to the input vec
+                strongly_connected_components.push(new_scc);
             }
         }
 
-        // Search for (a or a) and (~a or ~a) in the clauses
+        // we now find the strongly connected components of the implication graph
+        // first construct the implication graph
+        // map literals to the edges to which they are directed, along with infomration useful for 
+        // the search for strongly connected components
+        let mut impl_graph = HashMap::<Literal, HashSet<Literal>>::new();
+        // Create a node for every literal
         for var in &self.variables {
-            let pos_clause = (Literal(var.clone(), false), Literal(var.clone(), false));
-            let neg_clause = (Literal(var.clone(), true), Literal(var.clone(), true));
+            // positive literals
+            impl_graph.insert(Literal(var.clone().to_string(), false), HashSet::<Literal>::new());
+            // negative literals
+            impl_graph.insert(Literal(var.clone().to_string(), true), HashSet::<Literal>::new());
+        }
+        // Populate the edges with the implications
+        for (lit1, lit2) in &self.clauses {
+            let Literal(var1, neg1) = lit1;
+            let Literal(var2, neg2) = lit2;
 
-            // If a & ~a can be derived, the input formula is not SAT
-            if self.clauses.contains(&pos_clause) && self.clauses.contains(&neg_clause) {
-                return false;
+            // var1 V var2 = !var1 => var2
+            impl_graph.get_mut(&Literal(var1.clone().to_string(), !neg1))
+                .unwrap().insert(Literal(var2.clone().to_string(), *neg2));
+            // !var1 => var2 = !var2 => var1
+            impl_graph.get_mut(&Literal(var2.clone().to_string(), !neg2))
+                .unwrap().insert(Literal(var1.clone().to_string(), *neg1));
+        }
+
+        // let this be the strongly connected components we find
+        let mut strongly_connected_components: Vec<HashSet<Literal>> = vec![];
+        // let this be the search stack for strongly connected components
+        let mut scc_stack: Vec<Literal> = vec![];
+        // let this store the information required to perform the search for the SCCs
+        let mut scc_node_info = HashMap::<Literal, SCCNodeInfo>::new();
+        // let this store the index used to assign unique identifiers to roots of SCCs
+        let mut next_index: u32 = 0;
+
+        // find the strongly connected components of impl_graph
+        // for each variable
+        for var in &self.variables {
+            // search every positive and negative literal
+            // but only run the algorithm if these literals have not been searched before
+            // which we can tell by whether or not node_info contains them
+            let pos_lit = Literal(var.clone().to_string(), false);
+            if !scc_node_info.contains_key(&pos_lit) {
+                find_scc(pos_lit, &impl_graph, &mut scc_node_info, &mut scc_stack, &mut strongly_connected_components, &mut next_index);
+            }
+
+            let neg_lit = Literal(var.clone().to_string(), true);
+            if !scc_node_info.contains_key(&neg_lit) {
+                find_scc(neg_lit, &impl_graph, &mut scc_node_info, &mut scc_stack, &mut strongly_connected_components, &mut next_index);
             }
         }
 
+        // Now, the instance is unSAT iff any strongly connected component contains both a literal and its negation
+        for scc in &strongly_connected_components {
+            for Literal(var, neg) in scc {
+                if scc.contains(&Literal(var.clone().to_string(), !neg)) {
+                    return false;
+                }
+            }
+        }
+
+        // TODO: construct a satisfying instance for the formula
+
+        // else it is SAT
         true
     }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -185,10 +280,16 @@ mod tests {
         assert!(TwoCnf::from_description(String::from("(x1|x2) & (x1|~x3) & (~x1|~x2) & (x1|x4) & (~x1|~x5)")).is_sat());
         assert!(TwoCnf::from_description(String::from("(a|c)&(~a|~b)&(b|~c)")).is_sat());
         assert!(TwoCnf::from_description(String::from("(a|~b)&(~a|b)&(~a|~b)&(a|~c)")).is_sat());
+        assert!(TwoCnf::from_description(String::from("(~x3|x1)&(~x3|x2)")).is_sat());
 
         // UNSAT
         assert!(!TwoCnf::from_description(String::from("a&~a")).is_sat());
         assert!(!TwoCnf::from_description(String::from("(a|b)&(a|~b)&(~a|b)&(~a|~b)")).is_sat());
         assert!(!TwoCnf::from_description(String::from("(a|c)&(~a|~b)&(b|~c)&(a|~c)&(b|c)")).is_sat());
+        // Following UNSAT examples are from here: https://math.illinois.edu/system/files/2020-09/V.%20Karve-1.pdf
+        assert!(!TwoCnf::from_description(String::from("(a|b)&(~a|c)&(~b|c)&(~c|d)&(~c|e)&(~d|~e)")).is_sat());
+        assert!(!TwoCnf::from_description(String::from("(a|b)&(~a|c)&(~b|c)&(~c|d)&(~d|e)&(~d|f)&(~e|~f)")).is_sat());
+        assert!(!TwoCnf::from_description(String::from("(a|b)&(a|c)&(~a|d)&(~b|~c)&(b|~d)&(c|~d)")).is_sat());
+        assert!(!TwoCnf::from_description(String::from("(a|b)&(~a|d)&(b|c)&(~b|d)&(~b|e)&(~d|~c)&(~e|~d)")).is_sat());
     }
 }
