@@ -27,13 +27,13 @@ $ cargo run <phi>
 For example,
 ```sh
 $ cargo run "(a|b)&(~a|d)&(b|c)&(~b|d)&(~b|e)&(~d|~c)&(~e|~d)"
-Formula is SAT: false
+Formula is not SAT
 
-$ cargo run "(a|b)"
-Formula is SAT: true
+$ cargo run "(x1|x2) & (x1|~x3) & (~x1|~x2) & (x1|x4) & (~x1|~x5)"
+Formula is SAT with assignment {"x4": true, "x3": false, "x1": false, "x2": true, "x5": false}
 ```
 
-## Trivia
+## Repo Trivia
 
 If you are curious enough to search through the git history of this repository
 you will find that I initially implemented this 2SAT solver using the logical rule of resolution. However, it ran in $O(n^4)$ time or something like that, incredibly inefficient (it was still polytime though!).
