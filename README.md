@@ -9,13 +9,13 @@ The generalized problem $SAT$, of satisfiable Boolean formulas that are not rest
 An input formula is specified using `~` for logical negation, `&` for logical AND, and `|` for logical OR. Variables may be any alphanumeric string, not starting with a number. Then, the input must be specified as a 2CNF, where clauses (ORs) with 2 variables are enclosed in parentheses, and all clauses are conjoined by `&`. `&` must not appear within parentheses, only `|` can. `|` cannot appear outside parentheses. Parentheses may not be nested. Some valid formula strings:
 ```py
 "(a|b)&~c&(~a|~d)&(a|a)&c"
-"(x1|x2)&(x3|~x4)
+"(x1|x2)&(x3|~x4)"
 ```
-Some invalid formula strings:
+Some invalid formula strings (they are not 2CNFs):
 ```py
 "a|b"
 "(a&b)|(c&d)"
-"(a|b|c)" # this one isn't a 2CNF
+"(a|b|c)"
 "a&(b|c)&((c|a)&d|e)"
 ```
 
