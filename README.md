@@ -18,6 +18,7 @@ Some invalid formula strings (they are not 2CNFs):
 "(a|b|c)"
 "a&(b|c)&((c|a)&d|e)"
 ```
+Note that my parser removes all whitespace, so an input like `"hello there & (a | hello  there)"` (which is objectively terrible variable naming), is treated as `"hellothere&(a|hellothere)"` where the two variables are `a` and `hellothere`.
 
 Then, if your correctly specified formula is `<phi>`, check if it's satisfiable with
 ```sh

@@ -65,8 +65,10 @@ impl TwoCnf {
         };
 
         // construct the clauses and collect the variables concurrently
+        // note that all whitespace in the string is removed
         let mut variables = HashSet::<String>::new();
         let clauses: HashSet<(Literal, Literal)> = description
+            .replace(|c: char| c.is_whitespace(), "")
             .split('&')
             .map(|clause| {
                 if clause.contains('|') {
@@ -286,7 +288,10 @@ impl TwoCnf {
         }
 
         // Just a sanity check
-        assert!(self.evaluate(&assignment));
+        assert!(
+            self.evaluate(&assignment),
+            "Assignment found does not satisfy the 2CNF"
+        );
 
         Some(assignment)
     }
@@ -372,6 +377,22 @@ mod tests {
                 == HashSet::from([
                     (Literal("a".into(), false), Literal("b".into(), true)),
                     (Literal("c".into(), false), Literal("c".into(), false))
+                ])
+        );
+
+        let tc = TwoCnf::from_description("hello there & (a | hello  there)".to_string());
+        assert!(tc.variables == HashSet::from(["a".to_string(), "hellothere".to_string()]));
+        assert!(
+            tc.clauses
+                == HashSet::from([
+                    (
+                        Literal("hellothere".into(), false),
+                        Literal("hellothere".into(), false)
+                    ),
+                    (
+                        Literal("a".into(), false),
+                        Literal("hellothere".into(), false)
+                    )
                 ])
         );
     }
